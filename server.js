@@ -6,7 +6,8 @@ const mongoose = require('mongoose');
 const baseUrl = "https://api.github.com";
 mongoose.connect('mongodb://localhost/save-repos');
 var Repos = require('./repos');
-
+const clientID = "b2464a59102ba2db9cb1";
+const clientSecret = "4e265ceaa7bfc09315438f9d9e3d795302bca1ce";
 // Configure the Facebook strategy for use by Passport.
 //
 // OAuth 2.0-based strategies require a `verify` function which receives the
@@ -15,8 +16,8 @@ var Repos = require('./repos');
 // with a user object, which will be set at `req.user` in route handlers after
 // authentication.
 passport.use(new Strategy({
-    clientID: "b2464a59102ba2db9cb1",
-    clientSecret: '4e265ceaa7bfc09315438f9d9e3d795302bca1ce',
+    clientID,
+    clientSecret,
     callbackURL: 'http://localhost:3000/login/facebook/return'
   },
   function(accessToken, refreshToken, profile, cb) {
@@ -100,22 +101,25 @@ app.get('/profile',
   require('connect-ensure-login').ensureLoggedIn(),
   async (req, res) => {
     const { accessToken, username, _json: { public_repos } } = req.user;
+    // const {body: sss} = await got(`${baseUrl}/users/sindresorhus?client_id=${clientID}&client_secret=${clientSecret}`, {json: true, method: 'GET'});
+    // console.log('*******************************s*********************',sss);
+    const totalPages = Math.ceil(992/100);
     let reposData = [];
-    const apiUrl = `${baseUrl}/users/sindresorhus/repos?token=${accessToken}&per_page=100&page=1`;
-    console.log("((repos(((((((((sddddddddddddd", apiUrl);
+    const apiUrl = `${baseUrl}/users/sindresorhus/repos?client_id=${clientID}&client_secret=${clientSecret}&per_page=100&page=1`;
+    console.log(public_repos,"((repos(((((((((sddddddddddddd", apiUrl);
     const {body: repos} = await got(apiUrl, {json: true, method: 'GET'});
     console.log(username, "((((((((((((((repos(((((((((((((((((", repos.length);
-    let pageCount = 2;
-    reposData = [ ...reposData, ...repos];
 
-    // while(repos.length === 100){      
-    //   let apiUrlNew = `${baseUrl}/users/sindresorhus/repos?token=${accessToken}&per_page=100&page=${pageCount}`;
-    //   console.log("((repos(((((((((apiUrlNew", apiUrlNew);
-    //   const {body: repos} = await got(apiUrlNew, {json: true, method: 'GET'});
-    //   console.log(username, "((((((((((((((repos(((((((((((((((((", repos.length);
-    //   reposData = [ ...reposData, ...repos];
-    //   pageCount++;
-    // }
+    reposData = [ ...reposData, ...repos];
+    if(totalPages > 1){
+    for(let i = 1; i<=totalPages; i++){      
+      let apiUrlNew = `${baseUrl}/users/sindresorhus/repos?client_id=${clientID}&client_secret=${clientSecret}&per_page=100&page=${i}`;
+      console.log("((repos(((((((((apiUrlNew", apiUrlNew);
+      const {body: repos} = await got(apiUrlNew, {json: true, method: 'GET'});
+      console.log(username, "((((((((((((((repos(((((((((((((((((", repos.length);
+      reposData = [ ...reposData, ...repos];      
+    }
+  }
     res.render('profile', { user: req.user, repos: reposData });
   });
 
