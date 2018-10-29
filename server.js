@@ -1,7 +1,11 @@
 var express = require('express');
 var passport = require('passport');
-var Strategy = require('passport-facebook').Strategy;
-
+var Strategy = require('passport-github').Strategy;
+const got = require("got");
+const mongoose = require('mongoose');
+const baseUrl = "https://api.github.com";
+mongoose.connect('mongodb://localhost/save-repos');
+var Repos = require('./repos');
 
 // Configure the Facebook strategy for use by Passport.
 //
@@ -11,17 +15,18 @@ var Strategy = require('passport-facebook').Strategy;
 // with a user object, which will be set at `req.user` in route handlers after
 // authentication.
 passport.use(new Strategy({
-    clientID: process.env.CLIENT_ID,
-    clientSecret: process.env.CLIENT_SECRET,
+    clientID: "b2464a59102ba2db9cb1",
+    clientSecret: '4e265ceaa7bfc09315438f9d9e3d795302bca1ce',
     callbackURL: 'http://localhost:3000/login/facebook/return'
   },
   function(accessToken, refreshToken, profile, cb) {
+    console.log(accessToken, refreshToken, profile);
     // In this example, the user's Facebook profile is supplied as the user
     // record.  In a production-quality application, the Facebook profile should
     // be associated with a user record in the application's database, which
     // allows for account linking and authentication with other identity
     // providers.
-    return cb(null, profile);
+    return cb(null, {...profile, accessToken, refreshToken});
   }));
 
 
@@ -66,7 +71,13 @@ app.use(passport.session());
 // Define routes.
 app.get('/',
   function(req, res) {
-    res.render('home', { user: req.user });
+    Repos.find({}, null, { sort: {stargazers_count: -1 } }, function(err, repos) {
+      if (err) throw err;
+    
+      // object of all the users
+       res.render('home', { user: req.user, repos });
+
+    });
   });
 
 app.get('/login',
@@ -75,18 +86,80 @@ app.get('/login',
   });
 
 app.get('/login/facebook',
-  passport.authenticate('facebook'));
+  passport.authenticate('github'));
 
 app.get('/login/facebook/return', 
-  passport.authenticate('facebook', { failureRedirect: '/login' }),
+  passport.authenticate('github', { failureRedirect: '/login' }),
   function(req, res) {
     res.redirect('/');
   });
 
+
+
 app.get('/profile',
   require('connect-ensure-login').ensureLoggedIn(),
-  function(req, res){
-    res.render('profile', { user: req.user });
+  async (req, res) => {
+    const { accessToken, username, _json: { public_repos } } = req.user;
+    let reposData = [];
+    const apiUrl = `${baseUrl}/users/sindresorhus/repos?token=${accessToken}&per_page=100&page=1`;
+    console.log("((repos(((((((((sddddddddddddd", apiUrl);
+    const {body: repos} = await got(apiUrl, {json: true, method: 'GET'});
+    console.log(username, "((((((((((((((repos(((((((((((((((((", repos.length);
+    let pageCount = 2;
+    reposData = [ ...reposData, ...repos];
+
+    // while(repos.length === 100){      
+    //   let apiUrlNew = `${baseUrl}/users/sindresorhus/repos?token=${accessToken}&per_page=100&page=${pageCount}`;
+    //   console.log("((repos(((((((((apiUrlNew", apiUrlNew);
+    //   const {body: repos} = await got(apiUrlNew, {json: true, method: 'GET'});
+    //   console.log(username, "((((((((((((((repos(((((((((((((((((", repos.length);
+    //   reposData = [ ...reposData, ...repos];
+    //   pageCount++;
+    // }
+    res.render('profile', { user: req.user, repos: reposData });
   });
 
+  app.get('/publish/:repoId', async (req, res) => {
+    require('connect-ensure-login').ensureLoggedIn();
+    console.log("---------req.user----------",req.user)
+    const { accessToken,  username } = req.user;
+    const { repoId } = req.params;
+  
+    const apiUrl = `${baseUrl}/repos/${username}/${repoId}?token=${accessToken}`;
+    console.log("((repos(((((((((sddddddddddddd", apiUrl);
+    const {body: repoContent} = await got(apiUrl, {json: true, method: 'GET'});
+    const { full_name, stargazers_count, watchers_count, open_issues_count, created_at, forks_count, 
+      description, html_url, language, owner} = repoContent;
+    const { html_url: userProfileUrl, avatar_url, login } = owner;
+    console.log(full_name, watchers_count, "((((((((((((((repo data(((((((((((((((((", owner);
+    var repo = new Repos({
+      name: full_name,
+      stargazers_count,
+      watchers_count,
+      open_issues_count,
+      forks_count,
+      description,
+      html_url,
+      language,
+      owner: {
+        userProfileUrl,
+        avatar_url,
+        username: login
+      },
+      created_at
+    });
+
+    repo.save(function(err, savedData) {
+      if (err) throw err;
+      console.log('User saved successfully!',savedData);
+
+      res.json(savedData);
+    });
+    
+  });
+
+  app.get('/logout', function(req, res){
+    req.logout();
+    res.redirect('/');
+  });
 app.listen(3000);
