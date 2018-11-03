@@ -4,7 +4,7 @@ var Strategy = require('passport-github').Strategy;
 const got = require("got");
 const mongoose = require('mongoose');
 const baseUrl = "https://api.github.com";
-mongoose.connect('mongodb://localhost/save-repos');
+mongoose.connect('mongodb://node_passport:Admin123#@ds245523.mlab.com:45523/repos',{ useNewUrlParser: true });
 var Repos = require('./repos');
 const clientID = "b2464a59102ba2db9cb1";
 const clientSecret = "4e265ceaa7bfc09315438f9d9e3d795302bca1ce";
@@ -72,7 +72,7 @@ app.use(passport.session());
 // Define routes.
 app.get('/',
   function(req, res) {
-    Repos.find({}, null, { sort: {stargazers_count: -1 } }, function(err, repos) {
+    Repos.find({}, null, { sort: {stargazers_count: -1 },limit: 100 }, function(err, repos) {
       if (err) throw err;
     
       // object of all the users
@@ -96,7 +96,49 @@ app.get('/login/facebook/return',
   });
 
 
+app.get("/add", async (req, res) => {
+  const totalPages = Math.ceil(20377/100);
+  let reposData = [];
 
+
+  for(let i = 0; i<=totalPages; i++){      
+    let apiUrlNew = `${baseUrl}/users/pombredanne/repos?client_id=${clientID}&client_secret=${clientSecret}&per_page=100&page=${i}`;
+    console.log("((repos(((((((((apiUrlNew", apiUrlNew);
+    const {body: repos} = await got(apiUrlNew, {json: true, method: 'GET'});
+
+    reposData = [ ...reposData, ...repos];      
+  }
+  
+  
+  reposData.forEach( repoContent => {
+    const { full_name, stargazers_count, watchers_count, open_issues_count, created_at, forks_count, 
+      description, html_url, language, owner} = repoContent;
+    const { html_url: userProfileUrl, avatar_url, login } = owner;
+
+    var repo = new Repos({
+      name: full_name,
+      stargazers_count,
+      watchers_count,
+      open_issues_count,
+      forks_count,
+      description,
+      html_url,
+      language,
+      owner: {
+        userProfileUrl,
+        avatar_url,
+        username: login
+      },
+      created_at
+    });
+
+    repo.save(function(err, savedData) {
+      if (err) throw err;
+      console.log('saved successfully!--------',full_name);
+    });
+  });
+  res.json({save: true});
+});
 app.get('/profile',
   require('connect-ensure-login').ensureLoggedIn(),
   async (req, res) => {
@@ -166,4 +208,4 @@ app.get('/profile',
     req.logout();
     res.redirect('/');
   });
-app.listen(3000);
+app.listen(3011);
